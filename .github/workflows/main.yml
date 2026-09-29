@@ -1,0 +1,33 @@
+name: Sync & Filter FleaMarket Plugin
+
+on:
+  schedule:
+    # 每天 UTC 0:00 (北京时间 8:00) 自动运行一次
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 支持在 GitHub 网页手动点击触发运行
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Download and clean plugin
+        run: |
+          # 1. 下载原始插件内容
+          curl -sSL "https://kelee.one/Tool/Loon/Lpx/FleaMarket_remove_ads.lpx" -o temp_plugin.plugin
+
+          # 2. 正则剔除包含 recommend.list 的整行规则，并输出为新文件
+          grep -v "recommend\.list" temp_plugin.plugin > FleaMarket_clean.plugin
+
+      - name: Commit and push cleaned plugin
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add FleaMarket_clean.plugin
+          git commit -m "Auto update: remove recommend.list rule" || exit 0
+          git push
