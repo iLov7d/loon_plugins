@@ -18,18 +18,19 @@ jobs:
 
       - name: Download and clean plugin
         run: |
-          # 模拟 Safari 浏览器 User-Agent 进行拉取
-          curl -sSL -A "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1" \
-               -H "accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
-               -H "accept-language: zh-CN,zh-Hans;q=0.9" \
+          # 参考你的规则，使用 -H 传入 "User-Agent: Loon" 伪装请求头
+          curl -sSL -A "Loon" \
+               -H "User-Agent: Loon" \
+               -H "accept: */*" \
                "https://kelee.one/Tool/Loon/Lpx/FleaMarket_remove_ads.lpx" -o temp_plugin.plugin
 
-          # 校验是否成功拉取到了文本内容（排除 HTML 报错拦截页）
-          if grep -q "recommend\.list" temp_plugin.plugin || grep -q "\[Plugin\]" temp_plugin.plugin; then
-            echo "抓取成功，正在剔除推荐栏目规则..."
+          # 校验是否成功拉取到了文本内容（检测是否包含脚本或插件的关键字）
+          if grep -q "recommend\.list" temp_plugin.plugin || grep -q "\[Plugin\]" temp_plugin.plugin || grep -q "\[Rewrite\]" temp_plugin.plugin || grep -q "http-response" temp_plugin.plugin; then
+            echo "✅ 成功以 Loon 身份绕过 Cloudflare 拦截！正在剔除推荐栏目..."
             grep -v "recommend\.list" temp_plugin.plugin > FleaMarket_clean.plugin
           else
-            echo "抓取失败，触发了 Cloudflare 拦截"
+            echo "❌ 依然被拦截，准备输出返回内容前 20 行用于排查："
+            head -n 20 temp_plugin.plugin
             exit 1
           fi
 
