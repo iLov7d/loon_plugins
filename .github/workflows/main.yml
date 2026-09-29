@@ -4,7 +4,7 @@ on:
   schedule:
     # 每天 UTC 0:00 (北京时间 8:00) 自动运行一次
     - cron: '0 0 * * *'
-  workflow_dispatch: # 支持在 GitHub 网页手动点击触发运行
+  workflow_dispatch: # 支持手动点击触发
 
 jobs:
   build:
@@ -18,11 +18,20 @@ jobs:
 
       - name: Download and clean plugin
         run: |
-          # 1. 下载原始插件内容
-          curl -sSL "https://kelee.one/Tool/Loon/Lpx/FleaMarket_remove_ads.lpx" -o temp_plugin.plugin
+          # 模拟 Safari 浏览器 User-Agent 进行拉取
+          curl -sSL -A "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1" \
+               -H "accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
+               -H "accept-language: zh-CN,zh-Hans;q=0.9" \
+               "https://kelee.one/Tool/Loon/Lpx/FleaMarket_remove_ads.lpx" -o temp_plugin.plugin
 
-          # 2. 正则剔除包含 recommend.list 的整行规则，并输出为新文件
-          grep -v "recommend\.list" temp_plugin.plugin > FleaMarket_clean.plugin
+          # 校验是否成功拉取到了文本内容（排除 HTML 报错拦截页）
+          if grep -q "recommend\.list" temp_plugin.plugin || grep -q "\[Plugin\]" temp_plugin.plugin; then
+            echo "抓取成功，正在剔除推荐栏目规则..."
+            grep -v "recommend\.list" temp_plugin.plugin > FleaMarket_clean.plugin
+          else
+            echo "抓取失败，触发了 Cloudflare 拦截"
+            exit 1
+          fi
 
       - name: Commit and push cleaned plugin
         run: |
