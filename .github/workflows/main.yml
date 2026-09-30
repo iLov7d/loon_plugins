@@ -2,9 +2,9 @@ name: Sync & Filter FleaMarket Plugin
 
 on:
   schedule:
-    # 每天 UTC 0:00 (北京時間 8:00) 自動運行一次
+    # 每天 UTC 0:00 (北京时间 8:00) 自动运行一次
     - cron: '0 0 * * *'
-  workflow_dispatch: # 支持手動點擊觸發
+  workflow_dispatch: # 支持手动点击触发
 
 jobs:
   build:
@@ -16,28 +16,53 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Download and clean plugin
-        run: |
-          # 傳入與截圖完全一致的特徵 User-Agent 繞過網站驗證
-          curl -sSL -A "Loon/786 CFNetwork/1568.200.51 Darwin/24.1.0" \
-               -H "User-Agent: Loon/786 CFNetwork/1568.200.51 Darwin/24.1.0" \
-               -H "Accept: */*" \
-               "https://kelee.one/Tool/Loon/Lpx/FleaMarket_remove_ads.lpx" -o temp_plugin.plugin
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
 
-          # 檢查是否成功抓取文本內容
-          if grep -q "recommend\.list" temp_plugin.plugin || grep -q "\[Plugin\]" temp_plugin.plugin || grep -q "\[Rewrite\]" temp_plugin.plugin; then
-            echo "✅ 成功通過 kelee.one 的特徵 UA 驗證！正在剔除推薦欄目規則..."
-            grep -v "recommend\.list" temp_plugin.plugin > FleaMarket_clean.plugin
-          else
-            echo "❌ 擷取失敗，列印回傳內容前 20 行以供排查："
-            head -n 20 temp_plugin.plugin
-            exit 1
-          fi
+      - name: Install curl_cffi
+        run: pip install curl_cffi
+
+      - name: Fetch and Clean with TLS Spoofing
+        run: |
+          python3 -c '
+          from curl_cffi import requests
+          import sys
+
+          url = "https://kelee.one/Tool/Loon/Lpx/FleaMarket_remove_ads.lpx"
+          # 使用你截图中完全一致的特征 User-Agent
+          headers = {
+              "User-Agent": "Loon/786 CFNetwork/1568.200.51 Darwin/24.1.0",
+              "Accept": "*/*"
+          }
+
+          try:
+              # impersonate="safari15_5" 会完美伪装 iOS/Safari 的底层 TLS 握手指纹
+              res = requests.get(url, headers=headers, impersonate="safari15_5", timeout=15)
+              
+              if res.status_code == 200 and ("recommend.list" in res.text or "[Plugin]" in res.text or "[Rewrite]" in res.text):
+                  print("✅ 成功匹配 TLS 指纹与特征 UA，穿透 Cloudflare！正在剔除推荐栏目...")
+                  # 过滤掉包含 recommend.list 的行
+                  lines = res.text.splitlines()
+                  cleaned_lines = [line for line in lines if "recommend.list" not in line]
+                  cleaned_content = "\n".join(cleaned_lines)
+                  
+                  with open("FleaMarket_clean.plugin", "w", encoding="utf-8") as f:
+                      f.write(cleaned_content)
+              else:
+                  print(f"❌ 抓取失败，状态码: {res.status_code}")
+                  print("返回前 300 字符：\n", res.text[:300])
+                  sys.exit(1)
+          except Exception as e:
+              print(f"❌ 发生异常: {e}")
+              sys.exit(1)
+          '
 
       - name: Commit and push cleaned plugin
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add FleaMarket_clean.plugin
-          git commit -m "Auto update: remove recommend.list rule via precise UA" || exit 0
+          git commit -m "Auto update: remove recommend.list rule via TLS & UA spoofing" || exit 0
           git push
