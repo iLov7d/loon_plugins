@@ -2,9 +2,8 @@ name: Sync & Filter FleaMarket Plugin
 
 on:
   schedule:
-    # 每天 UTC 0:00 (北京时间 8:00) 自动运行一次
     - cron: '0 0 * * *'
-  workflow_dispatch: # 支持手动点击触发
+  workflow_dispatch:
 
 jobs:
   build:
@@ -24,35 +23,38 @@ jobs:
       - name: Install curl_cffi
         run: pip install curl_cffi
 
-      - name: Fetch and Clean with TLS Spoofing
+      - name: Fetch and Clean with Regex Matching
         run: |
           python3 -c '
           from curl_cffi import requests
+          import re
           import sys
 
           url = "https://kelee.one/Tool/Loon/Lpx/FleaMarket_remove_ads.lpx"
-          # 使用你截图中完全一致的特征 User-Agent
           headers = {
               "User-Agent": "Loon/786 CFNetwork/1568.200.51 Darwin/24.1.0",
               "Accept": "*/*"
           }
 
           try:
-              # impersonate="safari15_5" 会完美伪装 iOS/Safari 的底层 TLS 握手指纹
               res = requests.get(url, headers=headers, impersonate="safari15_5", timeout=15)
               
-              if res.status_code == 200 and ("recommend.list" in res.text or "[Plugin]" in res.text or "[Rewrite]" in res.text):
-                  print("✅ 成功匹配 TLS 指纹与特征 UA，穿透 Cloudflare！正在剔除推荐栏目...")
-                  # 过滤掉包含 recommend.list 的行
+              if res.status_code == 200 and ("recommend" in res.text or "[Plugin]" in res.text):
                   lines = res.text.splitlines()
-                  cleaned_lines = [line for line in lines if "recommend.list" not in line]
+                  # 使用正则表达式匹配过滤，无视 \. 转义符与大小写
+                  cleaned_lines = [line for line in lines if not re.search(r"recommend.*list", line, re.IGNORECASE)]
                   cleaned_content = "\n".join(cleaned_lines)
                   
+                  removed_count = len(lines) - len(cleaned_lines)
+                  if removed_count > 0:
+                      print(f"✅ 成功过滤掉 {removed_count} 行匹配规则！")
+                  else:
+                      print("⚠️ 未匹配到目标规则行，请检查文本格式")
+
                   with open("FleaMarket_clean.plugin", "w", encoding="utf-8") as f:
                       f.write(cleaned_content)
               else:
                   print(f"❌ 抓取失败，状态码: {res.status_code}")
-                  print("返回前 300 字符：\n", res.text[:300])
                   sys.exit(1)
           except Exception as e:
               print(f"❌ 发生异常: {e}")
@@ -64,5 +66,5 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add FleaMarket_clean.plugin
-          git commit -m "Auto update: remove recommend.list rule via TLS & UA spoofing" || exit 0
+          git commit -m "Fix regex filtering for recommend.list rule" || exit 0
           git push
