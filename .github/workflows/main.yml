@@ -1,4 +1,30 @@
-- name: Fetch and Clean
+name: Sync & Filter FleaMarket Plugin
+
+on:
+  schedule:
+    # 每天 UTC 0:00 (北京时间 8:00) 自动运行一次
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 支持手动点击触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install curl_cffi
+        run: pip install curl_cffi
+
+      - name: Fetch and Clean
         run: |
           python3 -c '
           from curl_cffi import requests
@@ -18,7 +44,7 @@
                   cleaned_lines = [line for line in lines if not re.search(r"recommend", line, re.IGNORECASE)]
                   cleaned_content = "\n".join(cleaned_lines)
                   
-                  # 1. 这里文件名改为 .lpx
+                  # 写入为 .lpx 后缀
                   with open("FleaMarket_clean.lpx", "w", encoding="utf-8") as f:
                       f.write(cleaned_content)
                   print("✅ 成功生成 FleaMarket_clean.lpx 文件！")
@@ -32,7 +58,6 @@
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          # 2. 这里也要改为 .lpx
           git add FleaMarket_clean.lpx
           git commit -m "Auto update: remove recommend rule" || exit 0
           git push
