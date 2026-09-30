@@ -1,29 +1,4 @@
-name: Sync & Filter FleaMarket Plugin
-
-on:
-  schedule:
-    - cron: '0 0 * * *'
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Install curl_cffi
-        run: pip install curl_cffi
-
-      - name: Fetch and Clean with Regex Matching
+- name: Fetch and Clean
         run: |
           python3 -c '
           from curl_cffi import requests
@@ -38,26 +13,18 @@ jobs:
 
           try:
               res = requests.get(url, headers=headers, impersonate="safari15_5", timeout=15)
-              
-              if res.status_code == 200 and ("recommend" in res.text or "[Plugin]" in res.text):
+              if res.status_code == 200 and len(res.text) > 100:
                   lines = res.text.splitlines()
-                  # 使用正则表达式匹配过滤，无视 \. 转义符与大小写
-                  cleaned_lines = [line for line in lines if not re.search(r"recommend.*list", line, re.IGNORECASE)]
+                  cleaned_lines = [line for line in lines if not re.search(r"recommend", line, re.IGNORECASE)]
                   cleaned_content = "\n".join(cleaned_lines)
                   
-                  removed_count = len(lines) - len(cleaned_lines)
-                  if removed_count > 0:
-                      print(f"✅ 成功过滤掉 {removed_count} 行匹配规则！")
-                  else:
-                      print("⚠️ 未匹配到目标规则行，请检查文本格式")
-
-                  with open("FleaMarket_clean.plugin", "w", encoding="utf-8") as f:
+                  # 1. 这里文件名改为 .lpx
+                  with open("FleaMarket_clean.lpx", "w", encoding="utf-8") as f:
                       f.write(cleaned_content)
+                  print("✅ 成功生成 FleaMarket_clean.lpx 文件！")
               else:
-                  print(f"❌ 抓取失败，状态码: {res.status_code}")
                   sys.exit(1)
           except Exception as e:
-              print(f"❌ 发生异常: {e}")
               sys.exit(1)
           '
 
@@ -65,6 +32,7 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          # 2. 这里也要改为 .lpx
           git add FleaMarket_clean.lpx
-          git commit -m "Fix regex filtering for recommend.list rule" || exit 0
+          git commit -m "Auto update: remove recommend rule" || exit 0
           git push
